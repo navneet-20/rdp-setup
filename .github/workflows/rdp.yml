@@ -1,4 +1,4 @@
-name: Free RDP Windows Server
+name: Free RDP (RustDesk)
 
 on:
   workflow_dispatch:
@@ -9,10 +9,17 @@ jobs:
     timeout-minutes: 360
 
     steps:
-    - name: Setup RustDesk Server
+    - name: Download RustDesk (Fixed Direct Link)
       run: |
-        Invoke-WebRequest https://github.com/rustdesk/rustdesk/releases/latest/download/rustdesk.exe -OutFile rustdesk.exe
-        Start-Process -FilePath ".\rustdesk.exe" -ArgumentList "--install-service" -Wait
-        Start-Process -FilePath ".\rustdesk.exe" -ArgumentList "--run"
-        Write-Host "RustDesk Installed. Use ID and Password below to connect."
-        Start-Sleep -Seconds 600
+        $url = "https://github.com/rustdesk/rustdesk/releases/download/1.3.6/rustdesk-1.3.6-x86_64-pc-windows-msvc.zip"
+        Invoke-WebRequest -Uri $url -OutFile rustdesk.zip
+        Expand-Archive -Path rustdesk.zip -DestinationPath .
+        Write-Host "✅ RustDesk downloaded and extracted."
+
+    - name: Run RustDesk
+      run: |
+        cd rustdesk-1.3.6-x86_64-pc-windows-msvc
+        Start-Process -FilePath ".\rustdesk.exe"
+        Write-Host "🚀 RustDesk started. You can now check its UI via RustDesk ID."
+        Write-Host "Wait a few minutes, then check the Actions logs for details."
+        Start-Sleep -Seconds 21600   # 6 hours (keeps RDP alive)
