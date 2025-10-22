@@ -1,11 +1,14 @@
 name: Free RDP (RustDesk Auto Latest Windows)
 
 on:
+  # This triggers the workflow manually from the Actions tab
   workflow_dispatch:
 
 jobs:
   build:
+    # Use the latest Windows runner
     runs-on: windows-latest
+    # Set the timeout for the session (360 minutes = 6 hours)
     timeout-minutes: 360
 
     steps:
@@ -27,8 +30,7 @@ jobs:
         } | Select-Object -First 1
 
         if (-not $asset) {
-            Write-Host "❌ No Windows asset found. Dumping list for debug:"
-            $latest.assets | ForEach-Object { Write-Host $_.name }
+            Write-Host "❌ No suitable Windows asset found."
             exit 1
         }
 
@@ -38,44 +40,68 @@ jobs:
         # Get EXE file path
         $exe = Get-Item $asset.name
         if (-not $exe) {
-            Write-Host "❌ rustdesk.exe not found!"
+            Write-Host "❌ rustdesk executable not found!"
             exit 1
         }
 
         Write-Host "🟢 RustDesk executable path: $($exe.FullName)"
+        # Save the path for the next step
         $exe.FullName | Out-File -FilePath "rustdesk_path.txt" -Encoding utf8
 
-    - name: Run RustDesk & Show ID
+    # --- ADJUSTED STEP: Enhanced file location check ---
+    - name: Run RustDesk & Show ID (Adjusted for Runner)
       shell: pwsh
       run: |
         $exePath = Get-Content -Path "rustdesk_path.txt" -Raw
         Write-Host "🚀 Launching RustDesk from: $exePath"
+        
+        # Start RustDesk process in the background
         Start-Process -FilePath $exePath
-        Start-Sleep -Seconds 15
+        Start-Sleep -Seconds 15 # Give it a moment to initialize
 
-        $configDir = "$env:APPDATA\RustDesk"
-        $idFile = Join-Path $configDir "id"
-        $passFile = Join-Path $configDir "password"
+        # Define potential configuration directories
+        $configDir_APPDATA = "$env:APPDATA\RustDesk"
+        $configDir_PROGDATA = "$env:PROGRAMDATA\RustDesk"
 
-        Write-Host "⌛ Waiting for RustDesk ID to be generated..."
+        $idFile_APPDATA = Join-Path $configDir_APPDATA "id"
+        $passFile_APPDATA = Join-Path $configDir_APPDATA "password"
+        
+        $idFile_PROGDATA = Join-Path $configDir_PROGDATA "id"
+        $passFile_PROGDATA = Join-Path $configDir_PROGDATA "password"
+
+        $found = $false
+        Write-Host "⌛ Waiting for RustDesk ID to be generated (checking APPDATA and PROGRAMDATA)..."
+        
+        # Loop for up to 30 intervals (150 seconds total wait time)
         for ($i=0; $i -lt 30; $i++) {
-          if ((Test-Path $idFile) -and (Test-Path $passFile)) {
-            Write-Host "🪪 RustDesk ID: $(Get-Content $idFile)"
-            Write-Host "🔑 Password: $(Get-Content $passFile)"
+          # Check APPDATA location
+          if ((Test-Path $idFile_APPDATA) -and (Test-Path $passFile_APPDATA)) {
+            Write-Host "--- CREDENTIALS FOUND (APPDATA) ---"
+            Write-Host "🪪 RustDesk ID: $(Get-Content $idFile_APPDATA)"
+            Write-Host "🔑 Password: $(Get-Content $passFile_APPDATA)"
+            $found = $true
+            break
+          }
+          # Check PROGRAMDATA location
+          if ((Test-Path $idFile_PROGDATA) -and (Test-Path $passFile_PROGDATA)) {
+            Write-Host "--- CREDENTIALS FOUND (PROGRAMDATA) ---"
+            Write-Host "🪪 RustDesk ID: $(Get-Content $idFile_PROGDATA)"
+            Write-Host "🔑 Password: $(Get-Content $passFile_PROGDATA)"
+            $found = $true
             break
           }
           Start-Sleep -Seconds 5
         }
 
-        if (-not (Test-Path $idFile)) {
-          Write-Host "⚠️ RustDesk ID file not found after 2 minutes."
-        }
-        if (-not (Test-Path $passFile)) {
-          Write-Host "⚠️ Password file not found after 2 minutes."
+        if (-not $found) {
+          Write-Host "🚨 ERROR: RustDesk ID and Password files not found after 2.5 minutes in either APPDATA or PROGRAMDATA."
+          # Note: The script will continue to keep the session alive even if credentials aren't found, 
+          # but you won't be able to connect unless the files appeared later.
         }
 
-        Write-Host "🕓 Keeping session alive for 6 hours..."
+        Write-Host "🕓 Keeping session alive for 6 hours (21600 seconds)..."
+        # This final sleep step is what keeps the runner running for your RDP session.
         Start-Sleep -Seconds 21600
 
     - name: Complete job
-      run: echo "✅ RustDesk job completed successfully."
+      run: echo "✅ RustDesk job completed successfully (Runner is now shutting down)."
