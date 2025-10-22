@@ -1,0 +1,18 @@
+name: Free RDP Windows Server
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-latest
+    timeout-minutes: 360
+
+    steps:
+    - name: Setup RustDesk Server
+      run: |
+        Invoke-WebRequest https://github.com/rustdesk/rustdesk/releases/latest/download/rustdesk.exe -OutFile rustdesk.exe
+        Start-Process -FilePath ".\rustdesk.exe" -ArgumentList "--install-service" -Wait
+        Start-Process -FilePath ".\rustdesk.exe" -ArgumentList "--run"
+        Write-Host "RustDesk Installed. Use ID and Password below to connect."
+        Start-Sleep -Seconds 600
