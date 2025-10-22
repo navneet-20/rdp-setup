@@ -45,12 +45,35 @@ jobs:
         Write-Host "🟢 RustDesk executable path: $($exe.FullName)"
         $exe.FullName | Out-File -FilePath "rustdesk_path.txt" -Encoding utf8
 
-    - name: Run RustDesk
+    - name: Run RustDesk & Show ID
       shell: pwsh
       run: |
         $exePath = Get-Content -Path "rustdesk_path.txt" -Raw
         Write-Host "🚀 Launching RustDesk from: $exePath"
         Start-Process -FilePath $exePath
+        Start-Sleep -Seconds 15
+
+        $configDir = "$env:APPDATA\RustDesk"
+        $idFile = Join-Path $configDir "id"
+        $passFile = Join-Path $configDir "password"
+
+        Write-Host "⌛ Waiting for RustDesk ID to be generated..."
+        for ($i=0; $i -lt 30; $i++) {
+          if ((Test-Path $idFile) -and (Test-Path $passFile)) {
+            Write-Host "🪪 RustDesk ID: $(Get-Content $idFile)"
+            Write-Host "🔑 Password: $(Get-Content $passFile)"
+            break
+          }
+          Start-Sleep -Seconds 5
+        }
+
+        if (-not (Test-Path $idFile)) {
+          Write-Host "⚠️ RustDesk ID file not found after 2 minutes."
+        }
+        if (-not (Test-Path $passFile)) {
+          Write-Host "⚠️ Password file not found after 2 minutes."
+        }
+
         Write-Host "🕓 Keeping session alive for 6 hours..."
         Start-Sleep -Seconds 21600
 
