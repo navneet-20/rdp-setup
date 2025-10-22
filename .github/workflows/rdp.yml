@@ -1,4 +1,4 @@
-name: Free RDP (RustDesk Auto Latest)
+name: Free RDP (RustDesk Auto Latest Windows)
 
 on:
   workflow_dispatch:
@@ -15,22 +15,44 @@ jobs:
     - name: Download Latest RustDesk Release (Windows)
       shell: pwsh
       run: |
-        # Get latest release metadata
+        # Fetch latest release info
         $latest = Invoke-RestMethod -Uri "https://api.github.com/repos/rustdesk/rustdesk/releases/latest"
         Write-Host "📦 Latest version: $($latest.tag_name)"
         Write-Host "🔍 Available assets:"
         $latest.assets | ForEach-Object { Write-Host " - $($_.name)" }
 
-        # Try to find Windows build (exe or zip)
+        # Match correct Windows release (exe or msi)
         $asset = $latest.assets | Where-Object {
-            $_.name -match "pc-windows" -and ($_.name -match "\.exe$" -or $_.name -match "\.zip$")
+            $_.name -match "x86_64.*\.exe$" -or $_.name -match "x86.*\.exe$" -or $_.name -match "\.msi$"
         } | Select-Object -First 1
 
         if (-not $asset) {
-            Write-Host "❌ No Windows asset found. Dumping asset list for debugging:"
+            Write-Host "❌ No Windows asset found. Dumping list for debug:"
             $latest.assets | ForEach-Object { Write-Host $_.name }
             exit 1
         }
 
         Write-Host "⬇️ Downloading: $($asset.name)"
-        Invoke-WebRequest -Uri $asset.brows
+        Invoke-WebRequest -Uri $asset.browser_download_url -OutFile $asset.name
+
+        # Get EXE file path
+        $exe = Get-Item $asset.name
+        if (-not $exe) {
+            Write-Host "❌ rustdesk.exe not found!"
+            exit 1
+        }
+
+        Write-Host "🟢 RustDesk executable path: $($exe.FullName)"
+        $exe.FullName | Out-File -FilePath "rustdesk_path.txt" -Encoding utf8
+
+    - name: Run RustDesk
+      shell: pwsh
+      run: |
+        $exePath = Get-Content -Path "rustdesk_path.txt" -Raw
+        Write-Host "🚀 Launching RustDesk from: $exePath"
+        Start-Process -FilePath $exePath
+        Write-Host "🕓 Keeping session alive for 6 hours..."
+        Start-Sleep -Seconds 21600
+
+    - name: Complete job
+      run: echo "✅ RustDesk job completed successfully."
