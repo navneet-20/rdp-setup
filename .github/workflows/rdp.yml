@@ -1,4 +1,4 @@
-name: Free RDP (RustDesk)
+name: Free RDP (RustDesk Latest Auto)
 
 on:
   workflow_dispatch:
@@ -9,17 +9,15 @@ jobs:
     timeout-minutes: 360
 
     steps:
-    - name: Download RustDesk (Fixed Direct Link)
+    - name: Download Latest RustDesk Release
       run: |
-        $url = "https://github.com/rustdesk/rustdesk/releases/download/1.3.6/rustdesk-1.3.6-x86_64-pc-windows-msvc.zip"
-        Invoke-WebRequest -Uri $url -OutFile rustdesk.zip
-        Expand-Archive -Path rustdesk.zip -DestinationPath .
-        Write-Host "✅ RustDesk downloaded and extracted."
+        $latest = Invoke-RestMethod -Uri "https://api.github.com/repos/rustdesk/rustdesk/releases/latest"
+        $asset = $latest.assets | Where-Object { $_.name -like "*windows*" -and $_.name -like "*.exe" } | Select-Object -First 1
+        Invoke-WebRequest -Uri $asset.browser_download_url -OutFile "rustdesk.exe"
+        Write-Host "✅ Downloaded RustDesk version $($latest.tag_name) successfully."
 
     - name: Run RustDesk
       run: |
-        cd rustdesk-1.3.6-x86_64-pc-windows-msvc
         Start-Process -FilePath ".\rustdesk.exe"
-        Write-Host "🚀 RustDesk started. You can now check its UI via RustDesk ID."
-        Write-Host "Wait a few minutes, then check the Actions logs for details."
-        Start-Sleep -Seconds 21600   # 6 hours (keeps RDP alive)
+        Write-Host "🚀 RustDesk started successfully. Wait a minute, then check its logs for connection details."
+        Start-Sleep -Seconds 21600   # Keeps it alive for 6 hours
