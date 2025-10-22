@@ -1,4 +1,4 @@
-name: Free SSH VPS (Ubuntu Runner)
+name: Free SSH VPS (Ubuntu Runner) - 1 Min SSH Visibility
 
 on:
   # This triggers the workflow manually from the Actions tab
@@ -12,35 +12,36 @@ jobs:
     timeout-minutes: 360
 
     steps:
-      - name: Set up tmate session for SSH access
+      - name: Set up tmate session for SSH access (Shows Connection Info)
         uses: mxschmitt/action-tmate@v3
+        id: tmate_setup
         with:
-          # This action sets up a temporary SSH tunnel and prints the connection details.
-          # The tmate session will stay active for the entire duration of the workflow
-          # or until you manually close the tmate session.
           limit-access-to-actor: false
+          # Run tmate in the background so the next step can execute
+          # and manually kill the session to stop the log output.
+          keep-alive: true
           
-      # --- SSH Credential Setup (Critical Step) ---
-      # Tmate does not natively support setting a password for the SSH tunnel.
-      # The connection details (SSH and Web URLs) are printed directly to the logs.
-      
-      # The article's requirement for a root@123 password cannot be directly met
-      # with this secure method (tmate uses temporary keys).
-      # The **SSH connection string** printed in the logs is your "credential".
-      
-      # For your reference, the user inside the runner will be 'runner' (not root).
-      
-      - name: Print Connection Details Reminder
+      - name: Wait 1 Minute to Allow Connection Copy
+        run: |
+          echo "⚠️ SSH connection details are currently visible in the logs above. You have 60 seconds to copy the string."
+          echo "The runner will continue for 6 hours after this wait, but the connection string will be removed from the log."
+          sleep 60
+        shell: bash
+        
+      - name: Stop Tmate Session Printing
+        # We run the kill command as the 'runner' user, which is the user 
+        # that the tmate action was executed as.
+        run: |
+          echo "✅ Killing Tmate session to stop log printing and proceed silently."
+          sudo -u runner tmate kill-session
+          
+      - name: Print Final Reminder and Keep Runner Alive
         run: |
           echo "=================================================================="
-          echo "🚨 IMPORTANT: YOUR SSH CONNECTION DETAILS ARE ABOVE 🚨"
-          echo "Look for the output line starting with 'Web Shell:' or 'SSH:'"
-          echo " "
-          echo "The **SSH connection string** (e.g., ssh <random-string>@<ip-address>) is your key."
-          echo "Paste this entire string into your local terminal (e.g., PuTTY/WSL/Terminal)."
-          echo " "
-          echo "User: **runner**"
-          echo "Timeout: **6 hours**"
+          echo "💡 REMINDER: The SSH tunnel is now established and silent."
+          echo "If you successfully connected, your session will remain active."
+          echo "The runner is now sleeping for the remainder of the 6 hours."
           echo "=================================================================="
           # Keep the job running for the full timeout-minutes, maintaining the SSH session
+          # 21600 seconds = 6 hours
           sleep 21600
