@@ -1,4 +1,4 @@
-name: Free RDP (RustDesk Auto-Detect Latest Windows Build)
+name: Free RDP (RustDesk Auto Latest)
 
 on:
   workflow_dispatch:
@@ -9,41 +9,28 @@ jobs:
     timeout-minutes: 360
 
     steps:
-        - name: Download Latest RustDesk Release (Windows)
+    - name: Set up job
+      run: echo "🚀 Starting RustDesk setup..."
+
+    - name: Download Latest RustDesk Release (Windows)
+      shell: pwsh
       run: |
+        # Get latest release metadata
         $latest = Invoke-RestMethod -Uri "https://api.github.com/repos/rustdesk/rustdesk/releases/latest"
         Write-Host "📦 Latest version: $($latest.tag_name)"
         Write-Host "🔍 Available assets:"
         $latest.assets | ForEach-Object { Write-Host " - $($_.name)" }
 
-        # Match common RustDesk Windows asset names (.exe or .zip)
+        # Try to find Windows build (exe or zip)
         $asset = $latest.assets | Where-Object {
             $_.name -match "pc-windows" -and ($_.name -match "\.exe$" -or $_.name -match "\.zip$")
         } | Select-Object -First 1
 
         if (-not $asset) {
-            Write-Host "❌ No Windows asset found. Dumping all asset names for debugging:"
+            Write-Host "❌ No Windows asset found. Dumping asset list for debugging:"
             $latest.assets | ForEach-Object { Write-Host $_.name }
             exit 1
         }
 
         Write-Host "⬇️ Downloading: $($asset.name)"
-        Invoke-WebRequest -Uri $asset.browser_download_url -OutFile $asset.name
-
-        if ($asset.name -match "\.zip$") {
-            Expand-Archive -Path $asset.name -DestinationPath ".\rustdesk" -Force
-            $exe = Get-ChildItem ".\rustdesk" -Filter "rustdesk.exe" -Recurse | Select-Object -First 1
-        } else {
-            $exe = Get-Item $asset.name
-        }
-
-        Write-Host "🟢 RustDesk executable path: $($exe.FullName)"
-        $exe.FullName | Out-File -FilePath "rustdesk_path.txt" -Encoding utf8
-
-
-    - name: Run RustDesk
-      run: |
-        $exePath = Get-Content -Path "rustdesk_path.txt" -Raw
-        Write-Host "🚀 Launching RustDesk from $exePath"
-        Start-Process -FilePath $exePath
-        Start-Sleep -Seconds 21600  # keep alive for 6 hours
+        Invoke-WebRequest -Uri $asset.brows
