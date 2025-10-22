@@ -1,4 +1,15 @@
-    - name: Download Latest RustDesk Release (Windows)
+name: Free RDP (RustDesk Auto-Detect Latest Windows Build)
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-latest
+    timeout-minutes: 360
+
+    steps:
+        - name: Download Latest RustDesk Release (Windows)
       run: |
         $latest = Invoke-RestMethod -Uri "https://api.github.com/repos/rustdesk/rustdesk/releases/latest"
         Write-Host "📦 Latest version: $($latest.tag_name)"
@@ -28,3 +39,11 @@
 
         Write-Host "🟢 RustDesk executable path: $($exe.FullName)"
         $exe.FullName | Out-File -FilePath "rustdesk_path.txt" -Encoding utf8
+
+
+    - name: Run RustDesk
+      run: |
+        $exePath = Get-Content -Path "rustdesk_path.txt" -Raw
+        Write-Host "🚀 Launching RustDesk from $exePath"
+        Start-Process -FilePath $exePath
+        Start-Sleep -Seconds 21600  # keep alive for 6 hours
