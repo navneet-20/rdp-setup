@@ -1,4 +1,4 @@
-name: Free RDP (RustDesk Auto Latest Windows)
+name: Free SSH VPS (Ubuntu Runner)
 
 on:
   # This triggers the workflow manually from the Actions tab
@@ -6,102 +6,41 @@ on:
 
 jobs:
   build:
-    # Use the latest Windows runner
-    runs-on: windows-latest
+    # Use the latest Ubuntu runner (Linux)
+    runs-on: ubuntu-latest
     # Set the timeout for the session (360 minutes = 6 hours)
     timeout-minutes: 360
 
     steps:
-    - name: Set up job
-      run: echo "🚀 Starting RustDesk setup..."
-
-    - name: Download Latest RustDesk Release (Windows)
-      shell: pwsh
-      run: |
-        # Fetch latest release info
-        $latest = Invoke-RestMethod -Uri "https://api.github.com/repos/rustdesk/rustdesk/releases/latest"
-        Write-Host "📦 Latest version: $($latest.tag_name)"
-        Write-Host "🔍 Available assets:"
-        $latest.assets | ForEach-Object { Write-Host " - $($_.name)" }
-
-        # Match correct Windows release (exe or msi)
-        $asset = $latest.assets | Where-Object {
-            $_.name -match "x86_64.*\.exe$" -or $_.name -match "x86.*\.exe$" -or $_.name -match "\.msi$"
-        } | Select-Object -First 1
-
-        if (-not $asset) {
-            Write-Host "❌ No suitable Windows asset found."
-            exit 1
-        }
-
-        Write-Host "⬇️ Downloading: $($asset.name)"
-        Invoke-WebRequest -Uri $asset.browser_download_url -OutFile $asset.name
-
-        # Get EXE file path
-        $exe = Get-Item $asset.name
-        if (-not $exe) {
-            Write-Host "❌ rustdesk executable not found!"
-            exit 1
-        }
-
-        Write-Host "🟢 RustDesk executable path: $($exe.FullName)"
-        # Save the path for the next step
-        $exe.FullName | Out-File -FilePath "rustdesk_path.txt" -Encoding utf8
-
-    # --- ADJUSTED STEP: Enhanced file location check ---
-    - name: Run RustDesk & Show ID (Adjusted for Runner)
-      shell: pwsh
-      run: |
-        $exePath = Get-Content -Path "rustdesk_path.txt" -Raw
-        Write-Host "🚀 Launching RustDesk from: $exePath"
-        
-        # Start RustDesk process in the background
-        Start-Process -FilePath $exePath
-        Start-Sleep -Seconds 15 # Give it a moment to initialize
-
-        # Define potential configuration directories
-        $configDir_APPDATA = "$env:APPDATA\RustDesk"
-        $configDir_PROGDATA = "$env:PROGRAMDATA\RustDesk"
-
-        $idFile_APPDATA = Join-Path $configDir_APPDATA "id"
-        $passFile_APPDATA = Join-Path $configDir_APPDATA "password"
-        
-        $idFile_PROGDATA = Join-Path $configDir_PROGDATA "id"
-        $passFile_PROGDATA = Join-Path $configDir_PROGDATA "password"
-
-        $found = $false
-        Write-Host "⌛ Waiting for RustDesk ID to be generated (checking APPDATA and PROGRAMDATA)..."
-        
-        # Loop for up to 30 intervals (150 seconds total wait time)
-        for ($i=0; $i -lt 30; $i++) {
-          # Check APPDATA location
-          if ((Test-Path $idFile_APPDATA) -and (Test-Path $passFile_APPDATA)) {
-            Write-Host "--- CREDENTIALS FOUND (APPDATA) ---"
-            Write-Host "🪪 RustDesk ID: $(Get-Content $idFile_APPDATA)"
-            Write-Host "🔑 Password: $(Get-Content $passFile_APPDATA)"
-            $found = $true
-            break
-          }
-          # Check PROGRAMDATA location
-          if ((Test-Path $idFile_PROGDATA) -and (Test-Path $passFile_PROGDATA)) {
-            Write-Host "--- CREDENTIALS FOUND (PROGRAMDATA) ---"
-            Write-Host "🪪 RustDesk ID: $(Get-Content $idFile_PROGDATA)"
-            Write-Host "🔑 Password: $(Get-Content $passFile_PROGDATA)"
-            $found = $true
-            break
-          }
-          Start-Sleep -Seconds 5
-        }
-
-        if (-not $found) {
-          Write-Host "🚨 ERROR: RustDesk ID and Password files not found after 2.5 minutes in either APPDATA or PROGRAMDATA."
-          # Note: The script will continue to keep the session alive even if credentials aren't found, 
-          # but you won't be able to connect unless the files appeared later.
-        }
-
-        Write-Host "🕓 Keeping session alive for 6 hours (21600 seconds)..."
-        # This final sleep step is what keeps the runner running for your RDP session.
-        Start-Sleep -Seconds 21600
-
-    - name: Complete job
-      run: echo "✅ RustDesk job completed successfully (Runner is now shutting down)."
+      - name: Set up tmate session for SSH access
+        uses: mxschmitt/action-tmate@v3
+        with:
+          # This action sets up a temporary SSH tunnel and prints the connection details.
+          # The tmate session will stay active for the entire duration of the workflow
+          # or until you manually close the tmate session.
+          limit-access-to-actor: false
+          
+      # --- SSH Credential Setup (Critical Step) ---
+      # Tmate does not natively support setting a password for the SSH tunnel.
+      # The connection details (SSH and Web URLs) are printed directly to the logs.
+      
+      # The article's requirement for a root@123 password cannot be directly met
+      # with this secure method (tmate uses temporary keys).
+      # The **SSH connection string** printed in the logs is your "credential".
+      
+      # For your reference, the user inside the runner will be 'runner' (not root).
+      
+      - name: Print Connection Details Reminder
+        run: |
+          echo "=================================================================="
+          echo "🚨 IMPORTANT: YOUR SSH CONNECTION DETAILS ARE ABOVE 🚨"
+          echo "Look for the output line starting with 'Web Shell:' or 'SSH:'"
+          echo " "
+          echo "The **SSH connection string** (e.g., ssh <random-string>@<ip-address>) is your key."
+          echo "Paste this entire string into your local terminal (e.g., PuTTY/WSL/Terminal)."
+          echo " "
+          echo "User: **runner**"
+          echo "Timeout: **6 hours**"
+          echo "=================================================================="
+          # Keep the job running for the full timeout-minutes, maintaining the SSH session
+          sleep 21600
