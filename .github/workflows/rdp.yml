@@ -1,4 +1,4 @@
-name: Ubuntu (runner)
+name: Ubuntu Runner
 
 on:
   workflow_dispatch:
@@ -9,20 +9,23 @@ jobs:
     timeout-minutes: 600
 
     steps:
-      - name: Start SSH (tmate)
+      - name: Start tmate (SSH)
+        id: tmate
         uses: mxschmitt/action-tmate@v3
         with:
           limit-access-to-actor: false
-          keep-alive: true
+          detached: true  # Run in background
 
-      - name: Show SSH for 1 Minute
+      - name: Show SSH connection (1 minute)
         run: |
-          echo "⚠️ SSH info visible above — copy it within 60 seconds."
+          echo "⚡ SSH access available for 1 minute — copy your link below:"
+          echo "SSH: $(tmate show-messages | grep 'ssh ' | head -n 1)"
+          echo "Web: $(tmate show-messages | grep 'https://tmate.io/t/' | head -n 1)"
           sleep 60
-          echo "⏱️ Hiding connection logs now."
+          echo "🔒 Hiding connection logs..."
           sudo -u runner tmate kill-session || true
 
-      - name: Keep Alive (6 Hours)
+      - name: Keep VPS alive (6 hours)
         run: |
-          echo "✅ SSH tunnel active. Runner will stay alive for 6 hours."
+          echo "✅ SSH session active. Runner will stay alive for 6 hours."
           sleep 21600
