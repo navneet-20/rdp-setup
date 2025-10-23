@@ -1,47 +1,28 @@
-name: Free SSH VPS (Ubuntu Runner) - 1 Min SSH Visibility
+name: Ubuntu (runner)
 
 on:
-  # This triggers the workflow manually from the Actions tab
   workflow_dispatch:
 
 jobs:
-  build:
-    # Use the latest Ubuntu runner (Linux)
+  ssh:
     runs-on: ubuntu-latest
-    # Set the timeout for the session (360 minutes = 6 hours)
-    timeout-minutes: 360
+    timeout-minutes: 600
 
     steps:
-      - name: Set up tmate session for SSH access (Shows Connection Info)
+      - name: Start SSH (tmate)
         uses: mxschmitt/action-tmate@v3
-        id: tmate_setup
         with:
           limit-access-to-actor: false
-          # Run tmate in the background so the next step can execute
-          # and manually kill the session to stop the log output.
           keep-alive: true
-          
-      - name: Wait 1 Minute to Allow Connection Copy
+
+      - name: Show SSH for 1 Minute
         run: |
-          echo "⚠️ SSH connection details are currently visible in the logs above. You have 60 seconds to copy the string."
-          echo "The runner will continue for 6 hours after this wait, but the connection string will be removed from the log."
+          echo "⚠️ SSH info visible above — copy it within 60 seconds."
           sleep 60
-        shell: bash
-        
-      - name: Stop Tmate Session Printing
-        # We run the kill command as the 'runner' user, which is the user 
-        # that the tmate action was executed as.
+          echo "⏱️ Hiding connection logs now."
+          sudo -u runner tmate kill-session || true
+
+      - name: Keep Alive (6 Hours)
         run: |
-          echo "✅ Killing Tmate session to stop log printing and proceed silently."
-          sudo -u runner tmate kill-session
-          
-      - name: Print Final Reminder and Keep Runner Alive
-        run: |
-          echo "=================================================================="
-          echo "💡 REMINDER: The SSH tunnel is now established and silent."
-          echo "If you successfully connected, your session will remain active."
-          echo "The runner is now sleeping for the remainder of the 6 hours."
-          echo "=================================================================="
-          # Keep the job running for the full timeout-minutes, maintaining the SSH session
-          # 21600 seconds = 6 hours
+          echo "✅ SSH tunnel active. Runner will stay alive for 6 hours."
           sleep 21600
