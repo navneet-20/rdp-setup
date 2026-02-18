@@ -9,41 +9,42 @@ jobs:
     timeout-minutes: 600
 
     steps:
-      - name: Setup Environment
+      - name: 🚀 Start Portal & Display Links
         run: |
-          # Checkout PairDrop
-          git clone https://github.com .
+          # 1. Clone the correct PairDrop repository
+          git clone https://github.com/schlagmichdoch/PairDrop.git .
           
-          # Install Node & Cloudflared
+          # 2. Setup Management (tmate)
           sudo apt-get update && sudo apt-get install -y tmate
-          curl -L https://github.com -o cloudflared.deb
+          
+          # 3. Install latest cloudflared (Verified x64 link)
+          curl -L https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64.deb -o cloudflared.deb
           sudo dpkg -i cloudflared.deb
           
-          # Install & Start PairDrop
+          # 4. Install PairDrop Dependencies and Start Server
+          # PairDrop default port is 3000
           npm install
           npm start & 
-
-      - name: 🚀 START PORTAL & DISPLAY LINKS
-        run: |
-          # 1. Start Tunnel
+          
+          # 5. Start Tunnels in Background
+          # We use --logfile to ensure the URL is captured correctly
           cloudflared tunnel --url http://localhost:3000 > cloudflare.log 2>&1 &
           
-          # 2. Start tmate
           tmate -S /tmp/tmate.sock new-session -d
           tmate -S /tmp/tmate.sock wait-for-session-initialized
           
-          # 3. Wait and Print Links
+          # 6. Display Credentials
           echo "========================================================="
           echo "⏳ Generating your public link (Wait 15s)..."
           sleep 15
           echo ""
           echo "🌐 WEB INTERFACE (ToffeeShare style):"
-          grep -o 'https://.*\.trycloudflare\.com' cloudflare.log || echo "❌ Link failed to generate. Check logs below."
+          grep -o 'https://.*\.trycloudflare\.com' cloudflare.log || (echo "❌ Link failed. Showing log tail:" && tail -n 10 cloudflare.log)
           echo ""
           echo "💻 SSH ACCESS (Management):"
           tmate -S /tmp/tmate.sock display -p '#{tmate_ssh}'
           echo "========================================================="
           
-          # Keep the job running for 6 hours
-          echo "✅ Server is LIVE. Keep this tab open."
+          # Keep the runner alive
+          echo "✅ Server is LIVE. Close this tab or cancel the run to stop."
           sleep 21600
