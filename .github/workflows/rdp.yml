@@ -1,4 +1,4 @@
-name: "Temp FileBrowser Share"
+name: "Pingvin Temporary Share"
 
 on:
   workflow_dispatch:
@@ -9,45 +9,35 @@ jobs:
     timeout-minutes: 360
 
     steps:
-      - name: Install dependencies
+      - name: Install Docker
         run: |
           sudo apt-get update
-          sudo apt-get install -y curl tar
-
-      - name: Download FileBrowser (official binary)
-        run: |
-          curl -L https://github.com/filebrowser/filebrowser/releases/latest/download/linux-amd64-filebrowser.tar.gz -o fb.tar.gz
-          tar -xzf fb.tar.gz
-          chmod +x filebrowser
+          sudo apt-get install -y docker.io curl
 
       - name: Install cloudflared
         run: |
           curl -L https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64.deb -o cloudflared.deb
           sudo dpkg -i cloudflared.deb
 
-      - name: Start FileBrowser + Tunnel
+      - name: Start Pingvin Share
         run: |
-          mkdir shared
+          docker run -d \
+            -p 3000:3000 \
+            --name pingvin \
+            ghcr.io/stonith404/pingvin-share:latest
 
-          # start filebrowser
-          ./filebrowser -r ./shared -p 8080 -u admin -P admin > fb.log 2>&1 &
+          # wait for server
+          sleep 15
 
-          # wait until server responds
-          sleep 10
-
-          # start cloudflare tunnel
-          cloudflared tunnel --url http://localhost:8080 > cloudflare.log 2>&1 &
+          # start Cloudflare tunnel
+          cloudflared tunnel --url http://localhost:3000 > cloudflare.log 2>&1 &
 
           sleep 20
 
           echo "======================================"
           echo "🌐 OPEN THIS LINK:"
           grep -o 'https://.*\.trycloudflare\.com' cloudflare.log | head -n 1
-          echo ""
-          echo "🔐 Login:"
-          echo "Username: admin"
-          echo "Password: admin"
           echo "======================================"
 
-          # keep alive ~6 hours
+          # keep runner alive (~6 hours)
           sleep 21600
