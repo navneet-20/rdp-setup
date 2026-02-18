@@ -6,49 +6,61 @@ on:
 jobs:
   share:
     runs-on: ubuntu-latest
-    timeout-minutes: 600
+    timeout-minutes: 360   # GitHub max safe time
 
     steps:
       - name: 🚀 Start Portal & Display Links
         run: |
-          # 1. Clone PairDrop
-          git clone https://github.com .
-          
-          # 2. Install Tools (tmate & cloudflared)
-          sudo apt-get update && sudo apt-get install -y tmate
-          curl -L https://github.com -o cloudflared.deb
+          echo "==== Setting up PairDrop server ===="
+
+          # 1️⃣ Clone PairDrop repository
+          git clone https://github.com/schlagmichdoch/PairDrop.git
+          cd PairDrop
+
+          # 2️⃣ Install dependencies
+          sudo apt-get update
+          sudo apt-get install -y tmate curl
+
+          # 3️⃣ Install cloudflared correctly
+          curl -L https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64.deb -o cloudflared.deb
           sudo dpkg -i cloudflared.deb
-          
-          # 3. Install & Start PairDrop
+
+          # 4️⃣ Install Node packages & start PairDrop
           export NODE_ENV=production
-          export CI=true
           npm install
-          npm start & 
-          
-          # 4. Start Tunnels
+          npm start > server.log 2>&1 &
+
+          # Wait for server to boot
+          sleep 15
+
+          # 5️⃣ Start Cloudflare tunnel
           cloudflared tunnel --url http://localhost:3000 > cloudflare.log 2>&1 &
-          
-          # 5. Start tmate (Fixed: No more wait-for-session-initialized)
-          tmate -S /tmp/tmate.sock new-session -d
-          
-          # 6. Display Credentials
-          echo "========================================================="
-          echo "⏳ Generating your public link (Wait 20s)..."
+
+          # Wait for tunnel link generation
           sleep 20
+
           echo ""
-          echo "🌐 WEB INTERFACE (ToffeeShare style):"
-          # Try to extract the link, if not found, show the log
+          echo "========================================================="
+          echo "🌐 PUBLIC FILE-SHARE LINK:"
+          
           if grep -q "trycloudflare.com" cloudflare.log; then
             grep -o 'https://.*\.trycloudflare\.com' cloudflare.log | head -n 1
           else
-            echo "❌ Link not found yet. Full Tunnel Log:"
+            echo "❌ Tunnel link not ready yet. Showing log:"
             cat cloudflare.log
           fi
+
           echo ""
-          echo "💻 SSH ACCESS (Management):"
+          echo "💻 OPTIONAL SSH ACCESS (tmate):"
+
+          # 6️⃣ Start tmate session
+          tmate -S /tmp/tmate.sock new-session -d
+          sleep 5
           tmate -S /tmp/tmate.sock display -p '#{tmate_ssh}'
+
           echo "========================================================="
-          
-          # Keep the runner alive
-          echo "✅ Server is LIVE. Close this tab or cancel the run to stop."
+          echo "✅ Server is LIVE for this workflow duration."
+          echo "Cancel the run to stop."
+
+          # 7️⃣ Keep runner alive (~6 hours max allowed)
           sleep 21600
