@@ -1,4 +1,4 @@
-name: "Temp Share Server"
+name: "Temp FileBrowser Share"
 
 on:
   workflow_dispatch:
@@ -12,28 +12,23 @@ jobs:
       - name: Install dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y curl wget
+          sudo apt-get install -y curl
 
-      - name: Install transfer-server
+      - name: Download FileBrowser
         run: |
-          wget https://github.com/dutchcoders/transfer.sh/releases/latest/download/transfer-server_linux_amd64.tar.gz
-          tar -xzf transfer-server_linux_amd64.tar.gz
-          chmod +x transfer-server
+          curl -fsSL https://filebrowser.org/get.sh | bash
 
       - name: Install cloudflared
         run: |
           curl -L https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64.deb -o cloudflared.deb
           sudo dpkg -i cloudflared.deb
 
-      - name: Start file server + tunnel
+      - name: Start FileBrowser + Tunnel
         run: |
-          mkdir uploads
+          mkdir shared
 
-          # start transfer.sh server
-          ./transfer-server \
-            --provider local \
-            --temp-path uploads \
-            --port 8080 > server.log 2>&1 &
+          # start filebrowser on port 8080
+          filebrowser -r ./shared -p 8080 > fb.log 2>&1 &
 
           sleep 10
 
@@ -42,10 +37,14 @@ jobs:
 
           sleep 20
 
-          echo "===================================="
-          echo "📤 OPEN THIS LINK TO UPLOAD FILE:"
+          echo "======================================"
+          echo "🌐 OPEN THIS LINK:"
           grep -o 'https://.*\.trycloudflare\.com' cloudflare.log | head -n 1
-          echo "===================================="
+          echo ""
+          echo "🔐 Login credentials:"
+          echo "Username: admin"
+          echo "Password: admin"
+          echo "======================================"
 
           # keep runner alive
           sleep 21600
