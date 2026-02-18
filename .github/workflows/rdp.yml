@@ -19,28 +19,31 @@ jobs:
           curl -L https://github.com -o cloudflared.deb
           sudo dpkg -i cloudflared.deb
           
-          # 3. Fix: PairDrop requires these env vars to run properly in a restricted environment
+          # 3. Install & Start PairDrop
           export NODE_ENV=production
-          
-          # 4. Install & Start PairDrop
+          export CI=true
           npm install
           npm start & 
           
-          # 5. Start Tunnels
+          # 4. Start Tunnels
           cloudflared tunnel --url http://localhost:3000 > cloudflare.log 2>&1 &
           
-          # 6. Start tmate (Fixed syntax)
+          # 5. Start tmate (Fixed: No more wait-for-session-initialized)
           tmate -S /tmp/tmate.sock new-session -d
-          # Wait for tmate to initialize manually instead of using the broken command
-          until [ -S /tmp/tmate.sock ]; do sleep 1; done
           
-          # 7. Display Credentials
+          # 6. Display Credentials
           echo "========================================================="
-          echo "⏳ Generating your public link (Wait 15s)..."
-          sleep 15
+          echo "⏳ Generating your public link (Wait 20s)..."
+          sleep 20
           echo ""
           echo "🌐 WEB INTERFACE (ToffeeShare style):"
-          grep -o 'https://.*\.trycloudflare\.com' cloudflare.log || (echo "❌ Link failed. Log excerpt:" && tail -n 15 cloudflare.log)
+          # Try to extract the link, if not found, show the log
+          if grep -q "trycloudflare.com" cloudflare.log; then
+            grep -o 'https://.*\.trycloudflare\.com' cloudflare.log | head -n 1
+          else
+            echo "❌ Link not found yet. Full Tunnel Log:"
+            cat cloudflare.log
+          fi
           echo ""
           echo "💻 SSH ACCESS (Management):"
           tmate -S /tmp/tmate.sock display -p '#{tmate_ssh}'
