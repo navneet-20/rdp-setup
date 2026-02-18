@@ -11,35 +11,36 @@ jobs:
     steps:
       - name: 🚀 Start Portal & Display Links
         run: |
-          # 1. Clone the correct PairDrop repository
-          git clone https://github.com/schlagmichdoch/PairDrop.git .
+          # 1. Clone PairDrop
+          git clone https://github.com .
           
-          # 2. Setup Management (tmate)
+          # 2. Install Tools (tmate & cloudflared)
           sudo apt-get update && sudo apt-get install -y tmate
-          
-          # 3. Install latest cloudflared (Verified x64 link)
-          curl -L https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64.deb -o cloudflared.deb
+          curl -L https://github.com -o cloudflared.deb
           sudo dpkg -i cloudflared.deb
           
-          # 4. Install PairDrop Dependencies and Start Server
-          # PairDrop default port is 3000
+          # 3. Fix: PairDrop requires these env vars to run properly in a restricted environment
+          export NODE_ENV=production
+          
+          # 4. Install & Start PairDrop
           npm install
           npm start & 
           
-          # 5. Start Tunnels in Background
-          # We use --logfile to ensure the URL is captured correctly
+          # 5. Start Tunnels
           cloudflared tunnel --url http://localhost:3000 > cloudflare.log 2>&1 &
           
+          # 6. Start tmate (Fixed syntax)
           tmate -S /tmp/tmate.sock new-session -d
-          tmate -S /tmp/tmate.sock wait-for-session-initialized
+          # Wait for tmate to initialize manually instead of using the broken command
+          until [ -S /tmp/tmate.sock ]; do sleep 1; done
           
-          # 6. Display Credentials
+          # 7. Display Credentials
           echo "========================================================="
           echo "⏳ Generating your public link (Wait 15s)..."
           sleep 15
           echo ""
           echo "🌐 WEB INTERFACE (ToffeeShare style):"
-          grep -o 'https://.*\.trycloudflare\.com' cloudflare.log || (echo "❌ Link failed. Showing log tail:" && tail -n 10 cloudflare.log)
+          grep -o 'https://.*\.trycloudflare\.com' cloudflare.log || (echo "❌ Link failed. Log excerpt:" && tail -n 15 cloudflare.log)
           echo ""
           echo "💻 SSH ACCESS (Management):"
           tmate -S /tmp/tmate.sock display -p '#{tmate_ssh}'
