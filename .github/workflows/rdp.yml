@@ -1,4 +1,4 @@
-name: On-Demand PairDrop Share
+name: "On-Demand Share"
 
 on:
   workflow_dispatch:
@@ -9,38 +9,41 @@ jobs:
     timeout-minutes: 600
 
     steps:
-      - name: Checkout PairDrop
-        uses: actions/checkout@v4
-        with:
-          repository: 'schlagmichdoch/PairDrop'
-
-      - name: Install & Start PairDrop
+      - name: Setup Environment
         run: |
-          npm install
-          npm start & # Runs web server on port 3000
-
-      - name: Setup Tunnels (Web + SSH)
-        run: |
-          # 1. Install Cloudflare for the Web UI
-          wget https://github.com
+          # Checkout PairDrop
+          git clone https://github.com .
+          
+          # Install Node & Cloudflared
+          sudo apt-get update && sudo apt-get install -y tmate
+          curl -L https://github.com -o cloudflared.deb
           sudo dpkg -i cloudflared.deb
           
-          # 2. Start Cloudflare Tunnel in background
+          # Install & Start PairDrop
+          npm install
+          npm start & 
+
+      - name: 🚀 START PORTAL & DISPLAY LINKS
+        run: |
+          # 1. Start Tunnel
           cloudflared tunnel --url http://localhost:3000 > cloudflare.log 2>&1 &
           
-          # 3. Start tmate (SSH) for your management
-          sudo apt-get install -y tmate
+          # 2. Start tmate
           tmate -S /tmp/tmate.sock new-session -d
           tmate -S /tmp/tmate.sock wait-for-session-initialized
           
-          echo "================================================"
+          # 3. Wait and Print Links
+          echo "========================================================="
+          echo "⏳ Generating your public link (Wait 15s)..."
+          sleep 15
+          echo ""
           echo "🌐 WEB INTERFACE (ToffeeShare style):"
-          sleep 5 # Wait for tunnel to generate link
-          grep -o 'https://.*\.trycloudflare\.com' cloudflare.log
+          grep -o 'https://.*\.trycloudflare\.com' cloudflare.log || echo "❌ Link failed to generate. Check logs below."
           echo ""
           echo "💻 SSH ACCESS (Management):"
           tmate -S /tmp/tmate.sock display -p '#{tmate_ssh}'
-          echo "================================================"
-
-      - name: Keep Alive (6 Hours)
-        run: sleep 21600
+          echo "========================================================="
+          
+          # Keep the job running for 6 hours
+          echo "✅ Server is LIVE. Keep this tab open."
+          sleep 21600
