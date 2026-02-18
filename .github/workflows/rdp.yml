@@ -1,31 +1,46 @@
-name: Ubuntu Runner
+name: On-Demand PairDrop Share
 
 on:
   workflow_dispatch:
 
 jobs:
-  ssh:
+  share:
     runs-on: ubuntu-latest
     timeout-minutes: 600
 
     steps:
-      - name: Start tmate (SSH)
-        id: tmate
-        uses: mxschmitt/action-tmate@v3
+      - name: Checkout PairDrop
+        uses: actions/checkout@v4
         with:
-          limit-access-to-actor: false
-          detached: true  # Run in background
+          repository: 'schlagmichdoch/PairDrop'
 
-      - name: Show SSH connection (1 minute)
+      - name: Install & Start PairDrop
         run: |
-          echo "⚡ SSH access available for 1 minute — copy your link below:"
-          echo "SSH: $(tmate show-messages | grep 'ssh ' | head -n 1)"
-          echo "Web: $(tmate show-messages | grep 'https://tmate.io/t/' | head -n 1)"
-          sleep 60
-          echo "🔒 Hiding connection logs..."
-          sudo -u runner tmate kill-session || true
+          npm install
+          npm start & # Runs web server on port 3000
 
-      - name: Keep VPS alive (6 hours)
+      - name: Setup Tunnels (Web + SSH)
         run: |
-          echo "✅ SSH session active. Runner will stay alive for 6 hours."
-          sleep 21600
+          # 1. Install Cloudflare for the Web UI
+          wget https://github.com
+          sudo dpkg -i cloudflared.deb
+          
+          # 2. Start Cloudflare Tunnel in background
+          cloudflared tunnel --url http://localhost:3000 > cloudflare.log 2>&1 &
+          
+          # 3. Start tmate (SSH) for your management
+          sudo apt-get install -y tmate
+          tmate -S /tmp/tmate.sock new-session -d
+          tmate -S /tmp/tmate.sock wait-for-session-initialized
+          
+          echo "================================================"
+          echo "🌐 WEB INTERFACE (ToffeeShare style):"
+          sleep 5 # Wait for tunnel to generate link
+          grep -o 'https://.*\.trycloudflare\.com' cloudflare.log
+          echo ""
+          echo "💻 SSH ACCESS (Management):"
+          tmate -S /tmp/tmate.sock display -p '#{tmate_ssh}'
+          echo "================================================"
+
+      - name: Keep Alive (6 Hours)
+        run: sleep 21600
