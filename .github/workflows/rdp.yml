@@ -1,4 +1,4 @@
-name: "Temp File Share"
+name: "Temp Share Server"
 
 on:
   workflow_dispatch:
@@ -9,34 +9,43 @@ jobs:
     timeout-minutes: 360
 
     steps:
-      - name: Install tools
+      - name: Install dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y curl python3-pip
-          pip install magic-wormhole
+          sudo apt-get install -y curl wget
 
-      - name: Start Cloudflare tunnel + wormhole receive server
+      - name: Install transfer-server
         run: |
-          # Install cloudflared
+          wget https://github.com/dutchcoders/transfer.sh/releases/latest/download/transfer-server_linux_amd64.tar.gz
+          tar -xzf transfer-server_linux_amd64.tar.gz
+          chmod +x transfer-server
+
+      - name: Install cloudflared
+        run: |
           curl -L https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64.deb -o cloudflared.deb
           sudo dpkg -i cloudflared.deb
 
-          # Start simple HTTP upload server
-          mkdir shared
-          cd shared
-          python3 -m http.server 8000 > server.log 2>&1 &
+      - name: Start file server + tunnel
+        run: |
+          mkdir uploads
+
+          # start transfer.sh server
+          ./transfer-server \
+            --provider local \
+            --temp-path uploads \
+            --port 8080 > server.log 2>&1 &
 
           sleep 10
 
-          # Start Cloudflare tunnel
-          cloudflared tunnel --url http://localhost:8000 > cloudflare.log 2>&1 &
+          # start cloudflare tunnel
+          cloudflared tunnel --url http://localhost:8080 > cloudflare.log 2>&1 &
 
           sleep 20
 
-          echo "=============================="
-          echo "🌐 OPEN THIS LINK TO DOWNLOAD:"
+          echo "===================================="
+          echo "📤 OPEN THIS LINK TO UPLOAD FILE:"
           grep -o 'https://.*\.trycloudflare\.com' cloudflare.log | head -n 1
-          echo "=============================="
+          echo "===================================="
 
-          # Keep alive
+          # keep runner alive
           sleep 21600
