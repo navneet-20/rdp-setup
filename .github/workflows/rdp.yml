@@ -9,46 +9,35 @@ jobs:
     timeout-minutes: 600
 
     steps:
-      - name: 🚀 Start Portal & Display Links
+      - name: 🚀 Start Portal
         run: |
-          # 1. Clone PairDrop
+          # 1. Setup Environment
           git clone https://github.com .
-          
-          # 2. Install Tools (tmate & cloudflared)
           sudo apt-get update && sudo apt-get install -y tmate
           curl -L https://github.com -o cloudflared.deb
           sudo dpkg -i cloudflared.deb
           
-          # 3. Install & Start PairDrop
-          export NODE_ENV=production
-          export CI=true
+          # 2. Start PairDrop (Background)
           npm install
           npm start & 
           
-          # 4. Start Tunnels
+          # 3. Start Tunnels (Background)
           cloudflared tunnel --url http://localhost:3000 > cloudflare.log 2>&1 &
-          
-          # 5. Start tmate (Fixed: No more wait-for-session-initialized)
           tmate -S /tmp/tmate.sock new-session -d
           
-          # 6. Display Credentials
+          # 4. Display Links and Wait
           echo "========================================================="
           echo "⏳ Generating your public link (Wait 20s)..."
           sleep 20
           echo ""
           echo "🌐 WEB INTERFACE (ToffeeShare style):"
-          # Try to extract the link, if not found, show the log
-          if grep -q "trycloudflare.com" cloudflare.log; then
-            grep -o 'https://.*\.trycloudflare\.com' cloudflare.log | head -n 1
-          else
-            echo "❌ Link not found yet. Full Tunnel Log:"
-            cat cloudflare.log
-          fi
+          grep -o 'https://.*\.trycloudflare\.com' cloudflare.log || echo "❌ Link not found yet. Check logs."
           echo ""
-          echo "💻 SSH ACCESS (Management):"
+          echo "💻 SSH ACCESS:"
           tmate -S /tmp/tmate.sock display -p '#{tmate_ssh}'
           echo "========================================================="
           
-          # Keep the runner alive
-          echo "✅ Server is LIVE. Close this tab or cancel the run to stop."
-          sleep 21600
+          # 5. KEEP ALIVE - This prevents the 'Exit Code 1'
+          echo "✅ Portal is live. Use the link above."
+          # This loop keeps the script running so GitHub doesn't kill the background tasks
+          tail -f /dev/null
