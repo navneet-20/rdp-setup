@@ -12,11 +12,13 @@ jobs:
       - name: Install dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y curl
+          sudo apt-get install -y curl tar
 
-      - name: Download FileBrowser
+      - name: Download FileBrowser (official binary)
         run: |
-          curl -fsSL https://filebrowser.org/get.sh | bash
+          curl -L https://github.com/filebrowser/filebrowser/releases/latest/download/linux-amd64-filebrowser.tar.gz -o fb.tar.gz
+          tar -xzf fb.tar.gz
+          chmod +x filebrowser
 
       - name: Install cloudflared
         run: |
@@ -27,9 +29,10 @@ jobs:
         run: |
           mkdir shared
 
-          # start filebrowser on port 8080
-          filebrowser -r ./shared -p 8080 > fb.log 2>&1 &
+          # start filebrowser
+          ./filebrowser -r ./shared -p 8080 -u admin -P admin > fb.log 2>&1 &
 
+          # wait until server responds
           sleep 10
 
           # start cloudflare tunnel
@@ -41,10 +44,10 @@ jobs:
           echo "🌐 OPEN THIS LINK:"
           grep -o 'https://.*\.trycloudflare\.com' cloudflare.log | head -n 1
           echo ""
-          echo "🔐 Login credentials:"
+          echo "🔐 Login:"
           echo "Username: admin"
           echo "Password: admin"
           echo "======================================"
 
-          # keep runner alive
+          # keep alive ~6 hours
           sleep 21600
