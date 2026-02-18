@@ -1,4 +1,4 @@
-name: "On-Demand Share"
+name: "Temp File Share"
 
 on:
   workflow_dispatch:
@@ -6,61 +6,37 @@ on:
 jobs:
   share:
     runs-on: ubuntu-latest
-    timeout-minutes: 360   # GitHub max safe time
+    timeout-minutes: 360
 
     steps:
-      - name: 🚀 Start Portal & Display Links
+      - name: Install tools
         run: |
-          echo "==== Setting up PairDrop server ===="
-
-          # 1️⃣ Clone PairDrop repository
-          git clone https://github.com/schlagmichdoch/PairDrop.git
-          cd PairDrop
-
-          # 2️⃣ Install dependencies
           sudo apt-get update
-          sudo apt-get install -y tmate curl
+          sudo apt-get install -y curl python3-pip
+          pip install magic-wormhole
 
-          # 3️⃣ Install cloudflared correctly
+      - name: Start Cloudflare tunnel + wormhole receive server
+        run: |
+          # Install cloudflared
           curl -L https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64.deb -o cloudflared.deb
           sudo dpkg -i cloudflared.deb
 
-          # 4️⃣ Install Node packages & start PairDrop
-          export NODE_ENV=production
-          npm install
-          npm start > server.log 2>&1 &
+          # Start simple HTTP upload server
+          mkdir shared
+          cd shared
+          python3 -m http.server 8000 > server.log 2>&1 &
 
-          # Wait for server to boot
-          sleep 15
+          sleep 10
 
-          # 5️⃣ Start Cloudflare tunnel
-          cloudflared tunnel --url http://localhost:3000 > cloudflare.log 2>&1 &
+          # Start Cloudflare tunnel
+          cloudflared tunnel --url http://localhost:8000 > cloudflare.log 2>&1 &
 
-          # Wait for tunnel link generation
           sleep 20
 
-          echo ""
-          echo "========================================================="
-          echo "🌐 PUBLIC FILE-SHARE LINK:"
-          
-          if grep -q "trycloudflare.com" cloudflare.log; then
-            grep -o 'https://.*\.trycloudflare\.com' cloudflare.log | head -n 1
-          else
-            echo "❌ Tunnel link not ready yet. Showing log:"
-            cat cloudflare.log
-          fi
+          echo "=============================="
+          echo "🌐 OPEN THIS LINK TO DOWNLOAD:"
+          grep -o 'https://.*\.trycloudflare\.com' cloudflare.log | head -n 1
+          echo "=============================="
 
-          echo ""
-          echo "💻 OPTIONAL SSH ACCESS (tmate):"
-
-          # 6️⃣ Start tmate session
-          tmate -S /tmp/tmate.sock new-session -d
-          sleep 5
-          tmate -S /tmp/tmate.sock display -p '#{tmate_ssh}'
-
-          echo "========================================================="
-          echo "✅ Server is LIVE for this workflow duration."
-          echo "Cancel the run to stop."
-
-          # 7️⃣ Keep runner alive (~6 hours max allowed)
+          # Keep alive
           sleep 21600
