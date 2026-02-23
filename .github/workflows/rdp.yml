@@ -1,39 +1,44 @@
-name: Temp File Share (Go)
+name: Windows RDP Runner
 on: 
   workflow_dispatch:
     inputs:
       duration:
-        description: 'Seconds to stay alive'
-        default: '3600'
+        description: 'Time to keep alive (e.g., 2h)'
+        default: '2h'
 
 jobs:
-  share:
-    runs-on: ubuntu-latest
+  build:
+    runs-on: windows-latest
     steps:
-      - name: Download GoHTTPServer Binary
+      - name: Set Password
         run: |
-          # Download the standalone binary
-          curl -L https://github.com/codeskyblue/gohttpserver/releases/download/1.1.5/gohttpserver_1.1.5_linux_amd64.tar.gz | tar -xz
-          chmod +x gohttpserver
-          mkdir -p uploads
-
-      - name: Setup Cloudflare Tunnel
-        run: |
-          curl -L --output cloudflared https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64
-          chmod +x cloudflared
-          ./cloudflared tunnel --url http://localhost:8000 > tunnel.log 2>&1 &
+          # Sets the password for the 'runneradmin' user
+          net user runneradmin MySecurePass123!
           
-      - name: Get URL
+      - name: Install & Start Cloudflare Tunnel
+        shell: pwsh
         run: |
-          sleep 10
-          URL=$(grep -o 'https://[-a-z0-9.]*trycloudflare.com' tunnel.log | head -n 1)
+          curl.exe -L --output cloudflared.exe https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-windows-amd64.exe
+          # Start a TCP tunnel for RDP (Port 3389)
+          Start-Process ./cloudflared.exe -ArgumentList "tunnel --url tcp://localhost:3389" -RedirectStandardOutput "tunnel.log"
+          
+      - name: Get RDP URL
+        shell: pwsh
+        run: |
+          echo "Waiting for tunnel..."
+          Start-Sleep -s 15
+          $Url = Select-String -Path "tunnel.log" -Pattern "tcp://[-a-z0-9.]*trycloudflare.com:[0-9]+" | Select-Object -ExpandProperty Matches | Select-Object -ExpandProperty Value
           echo "------------------------------------------------"
-          echo "SERVER IS LIVE AT: $URL"
+          echo "RDP ADDRESS: $Url"
+          echo "USERNAME: runneradmin"
+          echo "PASSWORD: MySecurePass123!"
           echo "------------------------------------------------"
 
-      - name: Run Server
+      - name: Keep Alive
+        shell: pwsh
         run: |
-          # --upload: Enables the upload button
-          # --delete: Allows deleting via UI
-          ./gohttpserver --root ./uploads --upload --delete --addr :8000 &
-          sleep ${{ github.event.inputs.duration }}
+          # Keeps the runner from finishing
+          $duration = "${{ github.event.inputs.duration }}"
+          if ($duration -like "*h") { $sec = [int]$duration.Replace("h","") * 3600 }
+          else { $sec = 3600 }
+          Start-Sleep -s $sec
