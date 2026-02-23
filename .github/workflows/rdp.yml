@@ -9,16 +9,21 @@ jobs:
     timeout-minutes: 360
 
     steps:
-      - name: Install tools
+      - name: Install dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y curl tar
+          sudo apt-get install -y git curl
 
-      - name: Download PicoShare
+      - name: Install Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.22'
+
+      - name: Clone PicoShare
         run: |
-          curl -L https://github.com/mtlynch/picoshare/releases/latest/download/picoshare-linux-amd64.tar.gz -o pico.tar.gz
-          tar -xzf pico.tar.gz
-          chmod +x picoshare
+          git clone https://github.com/mtlynch/picoshare.git
+          cd picoshare
+          go build -o picoshare ./cmd/picoshare
 
       - name: Install cloudflared
         run: |
@@ -27,13 +32,12 @@ jobs:
 
       - name: Start PicoShare + Tunnel
         run: |
+          cd picoshare
           mkdir data
 
-          ./picoshare \
-            -data-dir ./data \
-            -port 4000 > pico.log 2>&1 &
+          PORT=4000 PS_SHARED_SECRET=admin ./picoshare -db data/store.db > pico.log 2>&1 &
 
-          sleep 8
+          sleep 10
 
           cloudflared tunnel --url http://localhost:4000 > cloudflare.log 2>&1 &
           sleep 20
@@ -41,6 +45,9 @@ jobs:
           echo "======================================"
           echo "🌐 OPEN THIS LINK:"
           grep -o 'https://.*\.trycloudflare\.com' cloudflare.log | head -n 1
+          echo ""
+          echo "🔐 Login Password:"
+          echo "admin"
           echo "======================================"
 
           sleep 21600
