@@ -3,7 +3,7 @@ on:
   workflow_dispatch:
     inputs:
       duration:
-        description: 'How long to keep the server alive (e.g., 3600s for 1h)'
+        description: 'Seconds to keep alive (3600 = 1h)'
         default: '3600'
         required: true
 
@@ -11,10 +11,13 @@ jobs:
   share:
     runs-on: ubuntu-latest
     steps:
-      - name: Clone PsiTransfer
-        run: |
-          git clone --depth 1 https://github.com/psi-transfer/psitransfer.git .
-          
+      # Use the official action to pull the external repo correctly
+      - name: Checkout PsiTransfer
+        uses: actions/checkout@v4
+        with:
+          repository: 'psi-transfer/psitransfer'
+          ref: 'master'
+
       - name: Install Node.js
         uses: actions/setup-node@v4
         with:
@@ -35,19 +38,16 @@ jobs:
       - name: Show Connection URL
         run: |
           echo "Waiting for Cloudflare to generate URL..."
-          sleep 8
+          # Give it a few extra seconds for the handshake
+          sleep 12
           URL=$(grep -o 'https://[-a-z0-9.]*trycloudflare.com' tunnel.log | head -n 1)
           echo "------------------------------------------------"
           echo "SERVER IS LIVE AT: $URL"
           echo "------------------------------------------------"
-          # Store for later steps if needed
-          echo "FINAL_URL=$URL" >> $GITHUB_ENV
 
       - name: Run Server
         run: |
-          # Start PsiTransfer in the background
+          # Start PsiTransfer and wait
+          # Note: Files are stored in the 'data' folder on the runner
           NODE_ENV=production npm start &
-          
-          echo "Sharing is active. The runner will terminate in ${{ github.event.inputs.duration }} seconds."
-          # This keeps the runner busy so it doesn't close
           sleep ${{ github.event.inputs.duration }}
