@@ -1,45 +1,31 @@
-name: Temporary File Share
+name: Temp File Share (Go)
 on: 
   workflow_dispatch:
     inputs:
       duration:
-        description: 'Seconds to keep alive (3600 = 1h)'
+        description: 'Seconds to stay alive'
         default: '3600'
-        required: true
 
 jobs:
   share:
     runs-on: ubuntu-latest
     steps:
-      # Use the official action to pull the external repo correctly
-      - name: Checkout PsiTransfer
-        uses: actions/checkout@v4
-        with:
-          repository: 'psi-transfer/psitransfer'
-          ref: 'master'
-
-      - name: Install Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-
-      - name: Install Dependencies
+      - name: Download GoHTTPServer Binary
         run: |
-          npm install --production
-          mkdir -p data
+          # Download the standalone binary
+          curl -L https://github.com/codeskyblue/gohttpserver/releases/download/1.1.5/gohttpserver_1.1.5_linux_amd64.tar.gz | tar -xz
+          chmod +x gohttpserver
+          mkdir -p uploads
 
       - name: Setup Cloudflare Tunnel
         run: |
           curl -L --output cloudflared https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64
           chmod +x cloudflared
-          # Start tunnel and background it
-          ./cloudflared tunnel --url http://localhost:3000 > tunnel.log 2>&1 &
+          ./cloudflared tunnel --url http://localhost:8000 > tunnel.log 2>&1 &
           
-      - name: Show Connection URL
+      - name: Get URL
         run: |
-          echo "Waiting for Cloudflare to generate URL..."
-          # Give it a few extra seconds for the handshake
-          sleep 12
+          sleep 10
           URL=$(grep -o 'https://[-a-z0-9.]*trycloudflare.com' tunnel.log | head -n 1)
           echo "------------------------------------------------"
           echo "SERVER IS LIVE AT: $URL"
@@ -47,7 +33,7 @@ jobs:
 
       - name: Run Server
         run: |
-          # Start PsiTransfer and wait
-          # Note: Files are stored in the 'data' folder on the runner
-          NODE_ENV=production npm start &
+          # --upload: Enables the upload button
+          # --delete: Allows deleting via UI
+          ./gohttpserver --root ./uploads --upload --delete --addr :8000 &
           sleep ${{ github.event.inputs.duration }}
