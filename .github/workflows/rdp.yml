@@ -13,49 +13,60 @@ jobs:
       - name: 1. Configure User
         shell: pwsh
         run: |
-          # Change password for the existing runneradmin
           $Password = "MySecurePass123!"
           net user runneradmin $Password
-          
-          # Try to add to admin group but don't fail if already there
           net localgroup administrators runneradmin /add 2>$null
           exit 0 
 
-      - name: 2. Optimize for Remote Access
+      - name: 2. Optimize & Install
         run: |
-          # Disable Windows Defender for better UI speed
           Set-MpPreference -DisableRealtimeMonitoring $true
-          # Disable screen lock/sleep
-          powercfg /change monitor-timeout-ac 0
-          powercfg /change standby-timeout-ac 0
+          choco install ngrok -y
 
-      - name: 3. Setup Tunnel (Ngrok)
+      - name: 3. Start Tunnel
         shell: pwsh
         env:
           NGROK_AUTH_TOKEN: ${{ secrets.NGROK_AUTH_TOKEN }}
         run: |
-          choco install ngrok -y
           ngrok config add-authtoken $env:NGROK_AUTH_TOKEN
-          # Start tunnel for RDP
-          Start-Process ngrok -ArgumentList "tcp 3389"
-          
-      - name: 4. Get Connection Details
+          # Use Start-Process with -PassThru to ensure it detaches correctly
+          Start-Process -FilePath "ngrok" -ArgumentList "tcp 3389 --region us" -WindowStyle Hidden
+
+      - name: 4. Get Connection Details (With Retry)
         shell: pwsh
         run: |
-          Start-Sleep -s 12
-          $JSON = Invoke-RestMethod http://localhost:4040/api/tunnels
-          $FullAddr = $JSON.tunnels[0].public_url
-          $CleanAddr = $FullAddr.Replace("tcp://", "")
-          echo "================================================"
-          echo "RDP ADDRESS: $CleanAddr"
-          echo "USER:        runneradmin"
-          echo "PASSWORD:    MySecurePass123!"
-          echo "================================================"
+          Write-Host "Waiting for Ngrok API to wake up..."
+          $MaxRetries = 10
+          $RetryCount = 0
+          $JSON = $null
+
+          while ($RetryCount -lt $MaxRetries) {
+              try {
+                  $JSON = Invoke-RestMethod http://localhost:4040/api/tunnels
+                  if ($JSON.tunnels.Count -gt 0) { break }
+              } catch {
+                  Write-Host "Attempt $($RetryCount + 1): API not ready yet..."
+                  Start-Sleep -s 5
+                  $RetryCount++
+              }
+          }
+
+          if ($JSON -and $JSON.tunnels.Count -gt 0) {
+              $FullAddr = $JSON.tunnels[0].public_url
+              $CleanAddr = $FullAddr.Replace("tcp://", "")
+              echo "================================================"
+              echo "RDP ADDRESS: $CleanAddr"
+              echo "USER:        runneradmin"
+              echo "PASSWORD:    MySecurePass123!"
+              echo "================================================"
+          } else {
+              Write-Error "Ngrok failed to start or provide a URL."
+              exit 1
+          }
 
       - name: 5. Keep Alive
         shell: pwsh
         run: |
           $val = "${{ github.event.inputs.duration }}"
           $hours = [int]$val.Replace("h","")
-          Write-Host "Runner is live. The session will expire in $hours hours."
           Start-Sleep -s ($hours * 3600)
