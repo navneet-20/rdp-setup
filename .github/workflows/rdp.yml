@@ -1,59 +1,55 @@
-name: "Temporary File Share"
-
-on:
+name: Temporary File Share
+on: 
   workflow_dispatch:
+    inputs:
+      duration:
+        description: 'How long to keep the server alive (e.g., 1h, 30m)'
+        default: '1h'
+        required: true
 
 jobs:
   share:
     runs-on: ubuntu-latest
-    timeout-minutes: 360
-
     steps:
-      - name: Install dependencies
+      - name: Checkout PsiTransfer
+        uses: actions/checkout@v4
+        with:
+          repository: 'psi-transfer/習-transfer' # Official repo
+          ref: 'master'
+
+      - name: Install Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install Dependencies
         run: |
-          sudo apt-get update
-          sudo apt-get install -y curl lsof
+          npm install --production
+          mkdir -p data
 
-      - name: Download Miniserve binary
+      - name: Install & Start Cloudflare Tunnel
         run: |
-          curl -L https://github.com/svenstaro/miniserve/releases/latest/download/miniserve-linux-amd64 -o miniserve
-          chmod +x miniserve
-
-      - name: Install cloudflared
+          # Download cloudflared binary
+          curl -L --output cloudflared https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64
+          chmod +x cloudflared
+          
+          # Start tunnel in background (Quick Tunnel mode)
+          # This generates a random .trycloudflare.com URL
+          ./cloudflared tunnel --url http://localhost:3000 > tunnel.log 2>&1 &
+          
+      - name: Get Tunnel URL
         run: |
-          curl -L https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64.deb -o cloudflared.deb
-          sudo dpkg -i cloudflared.deb
-
-      - name: Start File Server
-        run: |
-          mkdir shared
-
-          echo "Starting Miniserve..."
-          ./miniserve shared \
-            --port 8080 \
-            --upload-files \
-            --overwrite-files \
-            --no-auth > server.log 2>&1 &
-
           sleep 5
+          grep -o 'https://[-a-z0-9.]*trycloudflare.com' tunnel.log | head -n 1
+          echo "URL_FOUND=$(grep -o 'https://[-a-z0-9.]*trycloudflare.com' tunnel.log | head -n 1)" >> $GITHUB_ENV
 
-          echo "Checking if port 8080 is listening..."
-          if lsof -i :8080; then
-            echo "Miniserve is running."
-          else
-            echo "Miniserve failed!"
-            cat server.log
-            exit 1
-          fi
-
-      - name: Start Cloudflare Tunnel
+      - name: Run PsiTransfer
         run: |
-          cloudflared tunnel --url http://localhost:8080 > cloudflare.log 2>&1 &
-          sleep 20
-
-          echo "======================================"
-          echo "🌐 OPEN THIS LINK:"
-          grep -o 'https://.*\.trycloudflare\.com' cloudflare.log | head -n 1
-          echo "======================================"
-
-          sleep 21600
+          echo "------------------------------------------------"
+          echo "SERVER IS LIVE AT: ${{ env.URL_FOUND }}"
+          echo "------------------------------------------------"
+          
+          # Run the app and keep the runner alive for the specified duration
+          # PSITRANSFER_PORT defaults to 3000
+          NODE_ENV=production npm start & 
+          sleep ${{ github.event.inputs.duration }}
