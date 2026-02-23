@@ -3,20 +3,18 @@ on:
   workflow_dispatch:
     inputs:
       duration:
-        description: 'How long to keep the server alive (e.g., 1h, 30m)'
-        default: '1h'
+        description: 'How long to keep the server alive (e.g., 3600s for 1h)'
+        default: '3600'
         required: true
 
 jobs:
   share:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout PsiTransfer
-        uses: actions/checkout@v4
-        with:
-          repository: 'psi-transfer/習-transfer' # Official repo
-          ref: 'master'
-
+      - name: Clone PsiTransfer
+        run: |
+          git clone --depth 1 https://github.com/psi-transfer/psitransfer.git .
+          
       - name: Install Node.js
         uses: actions/setup-node@v4
         with:
@@ -27,29 +25,29 @@ jobs:
           npm install --production
           mkdir -p data
 
-      - name: Install & Start Cloudflare Tunnel
+      - name: Setup Cloudflare Tunnel
         run: |
-          # Download cloudflared binary
           curl -L --output cloudflared https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64
           chmod +x cloudflared
-          
-          # Start tunnel in background (Quick Tunnel mode)
-          # This generates a random .trycloudflare.com URL
+          # Start tunnel and background it
           ./cloudflared tunnel --url http://localhost:3000 > tunnel.log 2>&1 &
           
-      - name: Get Tunnel URL
+      - name: Show Connection URL
         run: |
-          sleep 5
-          grep -o 'https://[-a-z0-9.]*trycloudflare.com' tunnel.log | head -n 1
-          echo "URL_FOUND=$(grep -o 'https://[-a-z0-9.]*trycloudflare.com' tunnel.log | head -n 1)" >> $GITHUB_ENV
+          echo "Waiting for Cloudflare to generate URL..."
+          sleep 8
+          URL=$(grep -o 'https://[-a-z0-9.]*trycloudflare.com' tunnel.log | head -n 1)
+          echo "------------------------------------------------"
+          echo "SERVER IS LIVE AT: $URL"
+          echo "------------------------------------------------"
+          # Store for later steps if needed
+          echo "FINAL_URL=$URL" >> $GITHUB_ENV
 
-      - name: Run PsiTransfer
+      - name: Run Server
         run: |
-          echo "------------------------------------------------"
-          echo "SERVER IS LIVE AT: ${{ env.URL_FOUND }}"
-          echo "------------------------------------------------"
+          # Start PsiTransfer in the background
+          NODE_ENV=production npm start &
           
-          # Run the app and keep the runner alive for the specified duration
-          # PSITRANSFER_PORT defaults to 3000
-          NODE_ENV=production npm start & 
+          echo "Sharing is active. The runner will terminate in ${{ github.event.inputs.duration }} seconds."
+          # This keeps the runner busy so it doesn't close
           sleep ${{ github.event.inputs.duration }}
