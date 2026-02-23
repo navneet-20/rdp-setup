@@ -1,51 +1,55 @@
-name: Simple Windows RDP (Ngrok)
+name: Windows 2025 Remote Desktop
 on: 
   workflow_dispatch:
     inputs:
       duration:
-        description: 'Hours to stay alive'
-        default: '6h'
+        description: 'Time to run (e.g., 4h)'
+        default: '4h'
 
 jobs:
-  rdp:
-    runs-on: windows-latest
+  rdp-session:
+    runs-on: windows-2025
     steps:
-      - name: Set Password
+      - name: 1. Set User Credentials
         run: |
           net user runneradmin MySecurePass123!
+          net localgroup administrators runneradmin /add
           
-      - name: Install Ngrok via Choco
+      - name: 2. Performance & Sleep Fix
         run: |
-          choco install ngrok -y
+          # Disable Windows Defender (frees up CPU)
+          Set-MpPreference -DisableRealtimeMonitoring $true
+          # Prevent monitor/standby timeouts
+          powercfg /change monitor-timeout-ac 0
+          powercfg /change standby-timeout-ac 0
 
-      - name: Start RDP Tunnel
+      - name: 3. Install & Start Ngrok
         shell: pwsh
         env:
           NGROK_AUTH_TOKEN: ${{ secrets.NGROK_AUTH_TOKEN }}
         run: |
-          # Configure and start ngrok
+          choco install ngrok -y
           ngrok config add-authtoken $env:NGROK_AUTH_TOKEN
+          # Start TCP tunnel for RDP Port 3389
           Start-Process ngrok -ArgumentList "tcp 3389"
           
-      - name: Get RDP Address
+      - name: 4. Display Connection Info
         shell: pwsh
         run: |
-          # Give Ngrok time to initialize
-          Start-Sleep -s 10
+          Start-Sleep -s 12
           $JSON = Invoke-RestMethod http://localhost:4040/api/tunnels
-          $Addr = $JSON.tunnels[0].public_url
-          # Standardizing the address for RDP client
-          $RdpAddr = $Addr.Replace("tcp://", "")
-          echo "------------------------------------------------"
-          echo "ADDRESS:  $RdpAddr"
-          echo "USER:     runneradmin"
-          echo "PASSWORD: MySecurePass123!"
-          echo "------------------------------------------------"
+          $FullAddr = $JSON.tunnels[0].public_url
+          $CleanAddr = $FullAddr.Replace("tcp://", "")
+          echo "================================================"
+          echo "RDP ADDRESS: $CleanAddr"
+          echo "USER:        runneradmin"
+          echo "PASSWORD:    MySecurePass123!"
+          echo "================================================"
 
-      - name: Wait for Session
+      - name: 5. Keep Alive Loop
         shell: pwsh
         run: |
-          $hours = "${{ github.event.inputs.duration }}".Replace("h","")
-          # Keep the runner alive
-          Start-Sleep -s ([int]$hours * 3600)
-          
+          $val = "${{ github.event.inputs.duration }}"
+          $hours = [int]$val.Replace("h","")
+          Write-Host "Runner is live. Connect now!"
+          Start-Sleep -s ($hours * 3600)
