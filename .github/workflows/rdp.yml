@@ -1,44 +1,48 @@
-name: Windows RDP Runner
+name: Simple Windows RDP (Ngrok)
 on: 
   workflow_dispatch:
     inputs:
       duration:
-        description: 'Time to keep alive (e.g., 2h)'
-        default: '2h'
+        description: 'Hours to stay alive'
+        default: '6h'
 
 jobs:
-  build:
+  rdp:
     runs-on: windows-latest
     steps:
       - name: Set Password
         run: |
-          # Sets the password for the 'runneradmin' user
           net user runneradmin MySecurePass123!
           
-      - name: Install & Start Cloudflare Tunnel
-        shell: pwsh
+      - name: Install Ngrok
         run: |
-          curl.exe -L --output cloudflared.exe https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-windows-amd64.exe
-          # Start a TCP tunnel for RDP (Port 3389)
-          Start-Process ./cloudflared.exe -ArgumentList "tunnel --url tcp://localhost:3389" -RedirectStandardOutput "tunnel.log"
+          curl.exe -L -o ngrok.zip https://bin.equinox.io/c/b34edq6jh9X/ngrok-v3-stable-windows-amd64.zip
+          Expand-Archive ngrok.zip
+
+      - name: Start RDP Tunnel
+        shell: pwsh
+        env:
+          NGROK_AUTH_TOKEN: ${{ secrets.NGROK_AUTH_TOKEN }}
+        run: |
+          .\ngrok\ngrok.exe config add-authtoken $env:NGROK_AUTH_TOKEN
+          # Start tunnel for RDP port 3389
+          Start-Process .\ngrok\ngrok.exe -ArgumentList "tcp 3389"
           
-      - name: Get RDP URL
+      - name: Get RDP Address
         shell: pwsh
         run: |
-          echo "Waiting for tunnel..."
-          Start-Sleep -s 15
-          $Url = Select-String -Path "tunnel.log" -Pattern "tcp://[-a-z0-9.]*trycloudflare.com:[0-9]+" | Select-Object -ExpandProperty Matches | Select-Object -ExpandProperty Value
+          Start-Sleep -s 10
+          # Query Ngrok API to get the public URL
+          $JSON = Invoke-RestMethod http://localhost:4040/api/tunnels
+          $Addr = $JSON.tunnels[0].public_url
           echo "------------------------------------------------"
-          echo "RDP ADDRESS: $Url"
-          echo "USERNAME: runneradmin"
+          echo "ADDRESS:  $Addr"
+          echo "USER:     runneradmin"
           echo "PASSWORD: MySecurePass123!"
           echo "------------------------------------------------"
 
-      - name: Keep Alive
+      - name: Wait for Session
         shell: pwsh
         run: |
-          # Keeps the runner from finishing
-          $duration = "${{ github.event.inputs.duration }}"
-          if ($duration -like "*h") { $sec = [int]$duration.Replace("h","") * 3600 }
-          else { $sec = 3600 }
-          Start-Sleep -s $sec
+          $hours = "${{ github.event.inputs.duration }}".Replace("h","")
+          Start-Sleep -s ([int]$hours * 3600)
