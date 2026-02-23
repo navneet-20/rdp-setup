@@ -1,4 +1,4 @@
-name: "Temp Share Clean"
+name: "Temp File Share"
 
 on:
   workflow_dispatch:
@@ -9,33 +9,63 @@ jobs:
     timeout-minutes: 360
 
     steps:
-      - name: Install tools
+      - name: Install dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y curl wget
-
-      - name: Download go-http-file-server
-        run: |
-          wget https://github.com/mjpclab/go-http-file-server/releases/latest/download/go-http-file-server_linux_amd64 -O fileserver
-          chmod +x fileserver
+          sudo apt-get install -y python3-pip curl
+          pip3 install fastapi uvicorn python-multipart
 
       - name: Install cloudflared
         run: |
           curl -L https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64.deb -o cloudflared.deb
           sudo dpkg -i cloudflared.deb
 
-      - name: Start File Server + Tunnel
+      - name: Create Upload Server
         run: |
           mkdir shared
 
-          # start file server with upload enabled
-          ./fileserver -r ./shared --upload --port 8080 > server.log 2>&1 &
+          cat <<EOF > server.py
+          from fastapi import FastAPI, UploadFile, File
+          from fastapi.responses import HTMLResponse, FileResponse
+          import os
 
+          app = FastAPI()
+
+          UPLOAD_DIR = "shared"
+          os.makedirs(UPLOAD_DIR, exist_ok=True)
+
+          @app.get("/", response_class=HTMLResponse)
+          async def home():
+              files = os.listdir(UPLOAD_DIR)
+              file_links = "".join([f"<li><a href='/files/{f}'>{f}</a></li>" for f in files])
+              return f"""
+              <h2>Temporary File Share</h2>
+              <form action="/upload" enctype="multipart/form-data" method="post">
+                  <input name="file" type="file">
+                  <input type="submit">
+              </form>
+              <h3>Files:</h3>
+              <ul>{file_links}</ul>
+              """
+
+          @app.post("/upload")
+          async def upload(file: UploadFile = File(...)):
+              file_path = os.path.join(UPLOAD_DIR, file.filename)
+              with open(file_path, "wb") as buffer:
+                  buffer.write(await file.read())
+              return {"filename": file.filename}
+
+          @app.get("/files/{filename}")
+          async def get_file(filename: str):
+              return FileResponse(os.path.join(UPLOAD_DIR, filename))
+          EOF
+
+      - name: Start Server + Tunnel
+        run: |
+          uvicorn server:app --host 0.0.0.0 --port 8000 > server.log 2>&1 &
           sleep 5
 
-          # start Cloudflare tunnel
-          cloudflared tunnel --url http://localhost:8080 > cloudflare.log 2>&1 &
-
+          cloudflared tunnel --url http://localhost:8000 > cloudflare.log 2>&1 &
           sleep 20
 
           echo "======================================"
