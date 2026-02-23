@@ -14,29 +14,30 @@ jobs:
         run: |
           net user runneradmin MySecurePass123!
           
-      - name: Install Ngrok
+      - name: Install Ngrok via Choco
         run: |
-          curl.exe -L -o ngrok.zip https://bin.equinox.io/c/b34edq6jh9X/ngrok-v3-stable-windows-amd64.zip
-          Expand-Archive ngrok.zip
+          choco install ngrok -y
 
       - name: Start RDP Tunnel
         shell: pwsh
         env:
           NGROK_AUTH_TOKEN: ${{ secrets.NGROK_AUTH_TOKEN }}
         run: |
-          .\ngrok\ngrok.exe config add-authtoken $env:NGROK_AUTH_TOKEN
-          # Start tunnel for RDP port 3389
-          Start-Process .\ngrok\ngrok.exe -ArgumentList "tcp 3389"
+          # Configure and start ngrok
+          ngrok config add-authtoken $env:NGROK_AUTH_TOKEN
+          Start-Process ngrok -ArgumentList "tcp 3389"
           
       - name: Get RDP Address
         shell: pwsh
         run: |
+          # Give Ngrok time to initialize
           Start-Sleep -s 10
-          # Query Ngrok API to get the public URL
           $JSON = Invoke-RestMethod http://localhost:4040/api/tunnels
           $Addr = $JSON.tunnels[0].public_url
+          # Standardizing the address for RDP client
+          $RdpAddr = $Addr.Replace("tcp://", "")
           echo "------------------------------------------------"
-          echo "ADDRESS:  $Addr"
+          echo "ADDRESS:  $RdpAddr"
           echo "USER:     runneradmin"
           echo "PASSWORD: MySecurePass123!"
           echo "------------------------------------------------"
@@ -45,4 +46,6 @@ jobs:
         shell: pwsh
         run: |
           $hours = "${{ github.event.inputs.duration }}".Replace("h","")
+          # Keep the runner alive
           Start-Sleep -s ([int]$hours * 3600)
+          
